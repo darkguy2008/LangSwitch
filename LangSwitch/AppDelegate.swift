@@ -214,7 +214,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         // Create a gray box behind the text field
         let grayBox = NSBox()
         grayBox.boxType = .custom
-        grayBox.fillColor = NSColor.lightGray
+        grayBox.fillColor = NSColor.quaternaryLabelColor
         grayBox.wantsLayer = true
         grayBox.layer?.cornerRadius = 10
         grayBox.borderWidth = 0 // No border for the gray box
