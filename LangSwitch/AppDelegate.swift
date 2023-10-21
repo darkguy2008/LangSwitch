@@ -17,6 +17,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     var dismissalWorkItem: DispatchWorkItem?  // Holds the current dismissal task
     var shouldShowPopup = true  // Flag to determine whether to show the popup
     var aboutWindow: NSWindow?
+    var globeKeyDownTimestamp: TimeInterval?
+    var isGlobeKeyDown: Bool = false  // This property tracks the current state of the Fn key
+    var keyPressDuration: TimeInterval = 1  // Default duration
+    var tickLabel: NSTextField!
 
     // This key is used to save and retrieve the setting from UserDefaults.
     private let shouldShowPopupKey = "ShouldShowPopup"
@@ -35,11 +39,65 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             shouldShowPopup = true
         }
 
+        
+        // Create a slider for the keypress duration
+        let slider = NSSlider(value: 1, minValue: 1, maxValue: 5, target: self, action: #selector(sliderValueChanged))
+        slider.numberOfTickMarks = 5
+        slider.allowsTickMarkValuesOnly = true
+        slider.tickMarkPosition = .below
+
+        // Create a view to contain the slider
+        let sliderView = NSView(frame: NSRect(x: 0, y: 0, width: 150, height: 40))
+        sliderView.addSubview(slider)
+
+        // Set the frame of the slider
+        slider.frame = sliderView.bounds
+
+        // Create a menu item for the slider and set its view
+        let sliderMenuItem = NSMenuItem()
+        sliderMenuItem.view = sliderView
+
+        // Create a label for the keypress delay
+        let label = NSTextField(labelWithString: "Keypress delay")
+        label.isBezeled = false
+        label.drawsBackground = false
+        label.alignment = .center
+        label.font = NSFont.systemFont(ofSize: 12)
+
+        // Create tick label
+        tickLabel = NSTextField(labelWithString: "\(Int(slider.intValue)) seconds")
+        tickLabel.isBezeled = false
+        tickLabel.drawsBackground = false
+        tickLabel.alignment = .center
+        tickLabel.font = NSFont.systemFont(ofSize: 10)
+
+        // Adjust the slider's frame to fit with the label and tick label
+        slider.frame = NSRect(x: 10, y: 20, width: 140, height: 20)
+
+        // Create a view to contain the label, slider, and tick label
+        let sliderContainer = NSView(frame: NSRect(x: 0, y: 0, width: 150, height: 60))
+        sliderContainer.addSubview(label)
+        sliderContainer.addSubview(slider)
+        sliderContainer.addSubview(tickLabel)
+
+        label.frame = NSRect(x: 0, y: 40, width: 150, height: 20)
+        tickLabel.frame = NSRect(x: 0, y: 0, width: 150, height: 20)
+
+        // Create a menu item for the container and set its view
+        sliderMenuItem.view = sliderContainer
+
+        
+        
+        
+        
         // Modify the menu for the status bar item
         let menu = NSMenu()
         let toggleItem = NSMenuItem(title: "Enable popup", action: #selector(toggleShouldShowPopup), keyEquivalent: "")
         toggleItem.state = shouldShowPopup ? .on : .off  // Set the initial state based on the flag
         menu.addItem(toggleItem)
+        // Add the slider menu item to the menu
+                   menu.addItem(NSMenuItem.separator())  // Optional: add a separator
+                   menu.addItem(sliderMenuItem)
         menu.addItem(NSMenuItem.separator()) // Optional: add a separator
         menu.addItem(withTitle: "About", action: #selector(showAboutDialog), keyEquivalent: "")
         menu.addItem(withTitle: "Exit", action: #selector(exitAction), keyEquivalent: "")
@@ -48,13 +106,33 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         NSApp.setActivationPolicy(.accessory)
         NSApp.hide(nil)
         
-        // Register for Fn button press events
-        NSEvent.addGlobalMonitorForEvents(matching: .flagsChanged) { event in
-            if event.modifierFlags.contains(.function) {
-                // Call the function to handle "Fn" button press
-                self.switchKeyboardLanguage()
-            }
-        }
+        // Register for key events
+           NSEvent.addGlobalMonitorForEvents(matching: [.flagsChanged]) { [weak self] event in
+               guard let self = self else { return }
+
+               let isGlobeKeyDownNow = event.modifierFlags.contains(.function)
+
+               if self.isGlobeKeyDown != isGlobeKeyDownNow {
+                   // The state of the Fn key has changed
+                   if isGlobeKeyDownNow {
+                       // The Fn key was just pressed down; record the timestamp
+                       self.globeKeyDownTimestamp = event.timestamp
+                   } else {
+                       // The Fn key was just released; check the elapsed time
+                       if let keyDownTimestamp = self.globeKeyDownTimestamp {
+                           let elapsedTime = event.timestamp - keyDownTimestamp
+
+                           if elapsedTime < keyPressDuration {
+                               // Less than X seconds between keyDown and keyUp, trigger the language switch
+                               self.switchKeyboardLanguage()
+                           }
+                       }
+                   }
+
+                   // Update the current state of the Fn key
+                   self.isGlobeKeyDown = isGlobeKeyDownNow
+               }
+           }
         
         // Initialize the popup window with no title bar and transparent background
         // Initialize the popup window with no title bar and transparent background
@@ -68,6 +146,13 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
         createAboutWindow()
     }
+    
+    @objc func sliderValueChanged(sender: NSSlider) {
+           // Update the keypress duration based on the slider's value
+           keyPressDuration = TimeInterval(sender.intValue)
+           tickLabel.stringValue = "\(Int(sender.intValue)) seconds"
+           print("Keypress duration set to: \(keyPressDuration) seconds")  // Just for confirmation, can be removed
+       }
     
     func createAboutWindow() {
         aboutWindow = NSWindow(
