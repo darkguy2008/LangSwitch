@@ -176,7 +176,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
         
         // Retrieve the next input source
-        let nextSource = inputSources[nextIndex] as! TISInputSource
+        let nextSource = inputSources[nextIndex] 
         
         // Switch to the next input source
         TISSelectInputSource(nextSource)
