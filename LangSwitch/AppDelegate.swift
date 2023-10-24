@@ -41,8 +41,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
         
         // Create a slider for the keypress duration
-        let slider = NSSlider(value: 1, minValue: 1, maxValue: 5, target: self, action: #selector(sliderValueChanged))
-        slider.numberOfTickMarks = 5
+        let slider = NSSlider(value: 1, minValue: 0, maxValue: 20, target: self, action: #selector(sliderValueChanged))
+        slider.numberOfTickMarks = 21
         slider.allowsTickMarkValuesOnly = true
         slider.tickMarkPosition = .below
 
@@ -148,11 +148,15 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
     
     @objc func sliderValueChanged(sender: NSSlider) {
-           // Update the keypress duration based on the slider's value
-           keyPressDuration = TimeInterval(sender.intValue)
-           tickLabel.stringValue = "\(Int(sender.intValue)) seconds"
-           print("Keypress duration set to: \(keyPressDuration) seconds")  // Just for confirmation, can be removed
-       }
+        // Update the keypress duration based on the slider's value
+        keyPressDuration = TimeInterval(sender.intValue) * 0.25
+        if keyPressDuration == Double(Int(keyPressDuration)) {
+            tickLabel.stringValue = "\(Int(keyPressDuration)) seconds"
+        } else {
+            tickLabel.stringValue = "\(keyPressDuration) seconds"
+        }
+        print("Keypress duration set to: \(keyPressDuration) seconds")  // Just for confirmation, can be removed
+    }
     
     func createAboutWindow() {
         aboutWindow = NSWindow(
