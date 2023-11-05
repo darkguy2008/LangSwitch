@@ -33,25 +33,25 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
         // Load the saved setting or default to true if it hasn't been set yet.
         shouldShowPopup = UserDefaults.standard.bool(forKey: shouldShowPopupKey)
-        
+
         // Load the saved keyPressDuration setting or default to 200ms if it hasn't been set yet.
         keyPressDuration = UserDefaults.standard.double(forKey: keyPressDurationKey)
         if keyPressDuration == 0 {
             keyPressDuration = 200.0 // Default to 200ms
         }
-                
+
         // If the key does not exist, UserDefaults returns false,
         // so we should handle the initial case when the app is first installed.
         if UserDefaults.standard.object(forKey: shouldShowPopupKey) == nil {
             shouldShowPopup = true
         }
-        
+
         // If the key does not exist, UserDefaults returns 0,
         // so we should handle the initial case when the app is first installed.
         if UserDefaults.standard.object(forKey: keyPressDurationKey) == nil {
             keyPressDuration = 1
         }
-        
+
         // Create a label for the keypress delay
         let label = NSTextField(labelWithString: "Keypress delay")
         label.isBezeled = false
@@ -79,7 +79,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         // Initialize the slider with the saved value
         slider.doubleValue = keyPressDuration // Use doubleValue instead of intValue
         tickLabel.stringValue = "\(Int(keyPressDuration))ms" // Now tickLabel is not nil
-        
+
         // Create a menu item for the slider and set its view
         let sliderMenuItem = NSMenuItem()
         sliderMenuItem.view = sliderView
@@ -169,7 +169,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         keyPressDuration = TimeInterval(sender.doubleValue) // Use doubleValue instead of intValue
         tickLabel.stringValue = "\(Int(keyPressDuration))ms"
         print("Keypress duration set to: \(keyPressDuration)ms") // Just for confirmation, can be removed
-        
+
         // Save the new keyPressDuration to UserDefaults
         UserDefaults.standard.set(keyPressDuration, forKey: keyPressDurationKey)
     }
