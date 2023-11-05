@@ -1,62 +1,57 @@
 //
-//  ContentView.swift
+//  AppDelegate.swift
 //  LangSwitch
 //
 //  Created by ANTON NIKEEV on 05.07.2023.
 //
 
-import SwiftUI
+import AppKit
 import Carbon
 import Foundation
-import AppKit
+import SwiftUI
 
 class AppDelegate: NSObject, NSApplicationDelegate {
     var statusBarItem: NSStatusItem?
     var currentAnimationID: UUID?
-    var popupWindow: NSWindow?  // The popup window
-    var dismissalWorkItem: DispatchWorkItem?  // Holds the current dismissal task
-    var shouldShowPopup = true  // Flag to determine whether to show the popup
+    var popupWindow: NSWindow? // The popup window
+    var dismissalWorkItem: DispatchWorkItem? // Holds the current dismissal task
+    var shouldShowPopup = true // Flag to determine whether to show the popup
     var aboutWindow: NSWindow?
     var globeKeyDownTimestamp: TimeInterval?
-    var isGlobeKeyDown: Bool = false  // This property tracks the current state of the Fn key
-    var keyPressDuration: TimeInterval = 1  // Default duration
+    var isGlobeKeyDown: Bool = false // This property tracks the current state of the Fn key
+    var keyPressDuration: TimeInterval = 1 // Default duration
     var tickLabel: NSTextField!
 
     // This key is used to save and retrieve the setting from UserDefaults.
     private let shouldShowPopupKey = "ShouldShowPopup"
-    
-    func applicationDidFinishLaunching(_ notification: Notification) {
+    private let keyPressDurationKey = "KeyPressDuration"
+
+    func applicationDidFinishLaunching(_: Notification) {
         // Create a status bar item with a system icon
         statusBarItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
         statusBarItem?.button?.image = NSImage(systemSymbolName: "globe", accessibilityDescription: nil)
-        
-               // Load the saved setting or default to true if it hasn't been set yet.
-        shouldShowPopup = UserDefaults.standard.bool(forKey: shouldShowPopupKey)
 
+        // Load the saved setting or default to true if it hasn't been set yet.
+        shouldShowPopup = UserDefaults.standard.bool(forKey: shouldShowPopupKey)
+        
+        // Load the saved keyPressDuration setting or default to 200ms if it hasn't been set yet.
+        keyPressDuration = UserDefaults.standard.double(forKey: keyPressDurationKey)
+        if keyPressDuration == 0 {
+            keyPressDuration = 200.0 // Default to 200ms
+        }
+                
         // If the key does not exist, UserDefaults returns false,
         // so we should handle the initial case when the app is first installed.
-        if (UserDefaults.standard.object(forKey: shouldShowPopupKey) == nil) {
+        if UserDefaults.standard.object(forKey: shouldShowPopupKey) == nil {
             shouldShowPopup = true
         }
-
         
-        // Create a slider for the keypress duration
-        let slider = NSSlider(value: 1, minValue: 0, maxValue: 20, target: self, action: #selector(sliderValueChanged))
-        slider.numberOfTickMarks = 21
-        slider.allowsTickMarkValuesOnly = true
-        slider.tickMarkPosition = .below
-
-        // Create a view to contain the slider
-        let sliderView = NSView(frame: NSRect(x: 0, y: 0, width: 150, height: 40))
-        sliderView.addSubview(slider)
-
-        // Set the frame of the slider
-        slider.frame = sliderView.bounds
-
-        // Create a menu item for the slider and set its view
-        let sliderMenuItem = NSMenuItem()
-        sliderMenuItem.view = sliderView
-
+        // If the key does not exist, UserDefaults returns 0,
+        // so we should handle the initial case when the app is first installed.
+        if UserDefaults.standard.object(forKey: keyPressDurationKey) == nil {
+            keyPressDuration = 1
+        }
+        
         // Create a label for the keypress delay
         let label = NSTextField(labelWithString: "Keypress delay")
         label.isBezeled = false
@@ -65,11 +60,29 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         label.font = NSFont.systemFont(ofSize: 12)
 
         // Create tick label
-        tickLabel = NSTextField(labelWithString: "\(Int(slider.intValue)) seconds")
+        tickLabel = NSTextField(labelWithString: "200ms") // Initialize with a default value
         tickLabel.isBezeled = false
         tickLabel.drawsBackground = false
         tickLabel.alignment = .center
         tickLabel.font = NSFont.systemFont(ofSize: 10)
+
+        // Create a slider for the keypress duration
+        let slider = NSSlider(value: 200, minValue: 0, maxValue: 1000, target: self, action: #selector(sliderValueChanged))
+        slider.numberOfTickMarks = 21
+        slider.allowsTickMarkValuesOnly = true
+        slider.tickMarkPosition = .below
+
+        // Create a view to contain the slider
+        let sliderView = NSView(frame: NSRect(x: 0, y: 0, width: 150, height: 40))
+        sliderView.addSubview(slider)
+
+        // Initialize the slider with the saved value
+        slider.doubleValue = keyPressDuration // Use doubleValue instead of intValue
+        tickLabel.stringValue = "\(Int(keyPressDuration))ms" // Now tickLabel is not nil
+        
+        // Create a menu item for the slider and set its view
+        let sliderMenuItem = NSMenuItem()
+        sliderMenuItem.view = sliderView
 
         // Adjust the slider's frame to fit with the label and tick label
         slider.frame = NSRect(x: 10, y: 20, width: 140, height: 20)
@@ -86,101 +99,105 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         // Create a menu item for the container and set its view
         sliderMenuItem.view = sliderContainer
 
-        
-        
-        
-        
         // Modify the menu for the status bar item
         let menu = NSMenu()
         let toggleItem = NSMenuItem(title: "Enable popup", action: #selector(toggleShouldShowPopup), keyEquivalent: "")
-        toggleItem.state = shouldShowPopup ? .on : .off  // Set the initial state based on the flag
+        toggleItem.state = shouldShowPopup ? .on : .off // Set the initial state based on the flag
         menu.addItem(toggleItem)
         // Add the slider menu item to the menu
-                   menu.addItem(NSMenuItem.separator())  // Optional: add a separator
-                   menu.addItem(sliderMenuItem)
+        menu.addItem(NSMenuItem.separator()) // Optional: add a separator
+        menu.addItem(sliderMenuItem)
         menu.addItem(NSMenuItem.separator()) // Optional: add a separator
         menu.addItem(withTitle: "About", action: #selector(showAboutDialog), keyEquivalent: "")
         menu.addItem(withTitle: "Exit", action: #selector(exitAction), keyEquivalent: "")
         statusBarItem?.menu = menu
-        
+
         NSApp.setActivationPolicy(.accessory)
         NSApp.hide(nil)
-        
+
         // Register for key events
-           NSEvent.addGlobalMonitorForEvents(matching: [.flagsChanged]) { [weak self] event in
-               guard let self = self else { return }
+        // Register for key events
+        NSEvent.addGlobalMonitorForEvents(matching: [.flagsChanged]) { [weak self] event in
+            guard let self = self else { return }
 
-               let isGlobeKeyDownNow = event.modifierFlags.contains(.function)
+            let isGlobeKeyDownNow = event.modifierFlags.contains(.function)
 
-               if self.isGlobeKeyDown != isGlobeKeyDownNow {
-                   // The state of the Fn key has changed
-                   if isGlobeKeyDownNow {
-                       // The Fn key was just pressed down; record the timestamp
-                       self.globeKeyDownTimestamp = event.timestamp
-                   } else {
-                       // The Fn key was just released; check the elapsed time
-                       if let keyDownTimestamp = self.globeKeyDownTimestamp {
-                           let elapsedTime = event.timestamp - keyDownTimestamp
+            if self.isGlobeKeyDown != isGlobeKeyDownNow {
+                // The state of the Fn key has changed
+                if isGlobeKeyDownNow {
+                    // The Fn key was just pressed down; record the timestamp
+                    self.globeKeyDownTimestamp = event.timestamp
+                    print("Fn key down at: \(event.timestamp)")
+                } else {
+                    // The Fn key was just released; check the elapsed time
+                    if let keyDownTimestamp = self.globeKeyDownTimestamp {
+                        let elapsedTime = (event.timestamp - keyDownTimestamp) * 1000 // Convert to milliseconds
 
-                           if elapsedTime < keyPressDuration {
-                               // Less than X seconds between keyDown and keyUp, trigger the language switch
-                               self.switchKeyboardLanguage()
-                           }
-                       }
-                   }
+                        print("Fn key up at: \(event.timestamp)")
+                        print("Elapsed time: \(elapsedTime)ms")
 
-                   // Update the current state of the Fn key
-                   self.isGlobeKeyDown = isGlobeKeyDownNow
-               }
-           }
-        
+                        if elapsedTime > self.keyPressDuration {
+                            // More than X milliseconds between keyDown and keyUp, trigger the language switch
+                            print("Switching language...")
+                            self.switchKeyboardLanguage()
+                        } else {
+                            print("Not switching language...")
+                        }
+                    }
+                }
+
+                // Update the current state of the Fn key
+                self.isGlobeKeyDown = isGlobeKeyDownNow
+            }
+        }
+
         // Initialize the popup window with no title bar and transparent background
         // Initialize the popup window with no title bar and transparent background
-               let windowSize = NSRect(x: 0, y: 0, width: 300, height: 125)
-               popupWindow = NSWindow(contentRect: windowSize, styleMask: [.borderless], backing: .buffered, defer: false)
-               popupWindow?.backgroundColor = NSColor.clear
-               popupWindow?.isOpaque = false
-               popupWindow?.level = NSWindow.Level.statusBar
-               popupWindow?.hasShadow = false
+        let windowSize = NSRect(x: 0, y: 0, width: 300, height: 125)
+        popupWindow = NSWindow(contentRect: windowSize, styleMask: [.borderless], backing: .buffered, defer: false)
+        popupWindow?.backgroundColor = NSColor.clear
+        popupWindow?.isOpaque = false
+        popupWindow?.level = NSWindow.Level.statusBar
+        popupWindow?.hasShadow = false
         popupWindow?.level = .floating
 
         createAboutWindow()
     }
-    
+
     @objc func sliderValueChanged(sender: NSSlider) {
         // Update the keypress duration based on the slider's value
-        keyPressDuration = TimeInterval(sender.intValue) * 0.25
-        if keyPressDuration == Double(Int(keyPressDuration)) {
-            tickLabel.stringValue = "\(Int(keyPressDuration)) seconds"
-        } else {
-            tickLabel.stringValue = "\(keyPressDuration) seconds"
-        }
-        print("Keypress duration set to: \(keyPressDuration) seconds")  // Just for confirmation, can be removed
+        keyPressDuration = TimeInterval(sender.doubleValue) // Use doubleValue instead of intValue
+        tickLabel.stringValue = "\(Int(keyPressDuration))ms"
+        print("Keypress duration set to: \(keyPressDuration)ms") // Just for confirmation, can be removed
+        
+        // Save the new keyPressDuration to UserDefaults
+        UserDefaults.standard.set(keyPressDuration, forKey: keyPressDurationKey)
     }
-    
+
     func createAboutWindow() {
         aboutWindow = NSWindow(
-                   contentRect: NSRect(x: 0, y: 0, width: 300, height: 250),
-                   styleMask: [.titled, .closable],
-                   backing: .buffered, defer: false)
-           aboutWindow?.center()
-           aboutWindow?.title = "About LangSwitch"
-           aboutWindow?.isReleasedWhenClosed = false  // Add this line
+            contentRect: NSRect(x: 0, y: 0, width: 300, height: 250),
+            styleMask: [.titled, .closable],
+            backing: .buffered, defer: false
+        )
+        aboutWindow?.center()
+        aboutWindow?.title = "About LangSwitch"
+        aboutWindow?.isReleasedWhenClosed = false // Add this line
 
-           let iconImageView = NSImageView(frame: NSRect(x: 150-60, y: 150-40, width: 120, height: 120))
-        iconImageView.image = NSImage(named: NSImage.Name("AppIcon"))  // Updated this line
-           aboutWindow?.contentView?.addSubview(iconImageView)
-            
-            let appNameLabel = NSTextField(frame: NSRect(x: 50, y: 80, width: 200, height: 20))
-            appNameLabel.stringValue = "LangSwitch"
-            appNameLabel.alignment = .center
-            appNameLabel.font = NSFont.systemFont(ofSize: 18)
-            appNameLabel.isBezeled = false
-            appNameLabel.drawsBackground = false
-            appNameLabel.isEditable = false
-            appNameLabel.isSelectable = false
-            aboutWindow?.contentView?.addSubview(appNameLabel)
-                    
+        let iconImageView = NSImageView(frame: NSRect(x: 150 - 60, y: 150 - 40, width: 120, height: 120))
+        iconImageView.image = NSImage(named: NSImage.Name("AppIcon")) // Updated this line
+        aboutWindow?.contentView?.addSubview(iconImageView)
+
+        let appNameLabel = NSTextField(frame: NSRect(x: 50, y: 80, width: 200, height: 20))
+        appNameLabel.stringValue = "LangSwitch"
+        appNameLabel.alignment = .center
+        appNameLabel.font = NSFont.systemFont(ofSize: 18)
+        appNameLabel.isBezeled = false
+        appNameLabel.drawsBackground = false
+        appNameLabel.isEditable = false
+        appNameLabel.isSelectable = false
+        aboutWindow?.contentView?.addSubview(appNameLabel)
+
         let authorLabel = NSTextField(frame: NSRect(x: 50, y: 55, width: 200, height: 20))
         authorLabel.stringValue = "Version 1.0"
         authorLabel.alignment = .center
@@ -190,36 +207,34 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         authorLabel.isEditable = false
         authorLabel.isSelectable = false
         aboutWindow?.contentView?.addSubview(authorLabel)
-        
+
         let githubButton = NSButton(frame: NSRect(x: 75, y: 10, width: 150, height: 30))
         githubButton.title = "View on GitHub"
         githubButton.bezelStyle = .rounded
         githubButton.target = self
         githubButton.action = #selector(openGitHubRepo) // The action that will open the GitHub repo
         aboutWindow?.contentView?.addSubview(githubButton)
-        
     }
 
-    
     @objc func showAboutDialog() {
         // Show the "About" window
         aboutWindow?.makeKeyAndOrderFront(nil)
-        NSApp.activate(ignoringOtherApps: true)  // Bring app to the foreground
+        NSApp.activate(ignoringOtherApps: true) // Bring app to the foreground
     }
 
     @objc func openGitHubRepo() {
         // Open the GitHub repository in the default web browser
-        if let url = URL(string: "https://github.com/darkguy2008/LangSwitch") {  // Replace with your repository URL
+        if let url = URL(string: "https://github.com/darkguy2008/LangSwitch") { // Replace with your repository URL
             NSWorkspace.shared.open(url)
         }
     }
-    
+
     @objc func exitAction() {
         NSApplication.shared.terminate(nil)
     }
-    
+
     // Method to toggle the display of the language switch popup
-    
+
     @objc func toggleShouldShowPopup(_ sender: NSMenuItem) {
         shouldShowPopup.toggle() // Toggle the flag
 
@@ -229,32 +244,33 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         // Update the checkmark state based on the current state
         sender.state = shouldShowPopup ? .on : .off
     }
-    
+
     func switchKeyboardLanguage() {
         // Get the current keyboard input source
         guard let currentSource = TISCopyCurrentKeyboardInputSource()?.takeUnretainedValue() else {
             print("Failed to switch keyboard language.")
             return
         }
-        
+
         // Get all enabled keyboard input sources
         guard let inputSources = TISCreateInputSourceList(nil, false)?.takeRetainedValue() as? [TISInputSource],
-              !inputSources.isEmpty else {
+              !inputSources.isEmpty
+        else {
             print("Failed to switch keyboard language.")
             return
         }
-        
+
         // Find the index of the current input source
         guard let currentIndex = inputSources.firstIndex(where: { $0 == currentSource }) else {
             print("Failed to switch keyboard language.")
             return
         }
-        
+
         // Calculate the index of the next input source
         var nextIndex = (currentIndex + 1) % inputSources.count
-        
+
         let skipSources = ["Emoji & Symbols", "com.apple.PressAndHold", "Dictation", "EmojiFunctionRowIM_Extension"]
-        
+
         // Skip system keyboards
         while let nextSource = inputSources[nextIndex] as TISInputSource? {
             let sourceName = Unmanaged<CFString>.fromOpaque(TISGetInputSourceProperty(nextSource, kTISPropertyLocalizedName)).takeUnretainedValue() as String
@@ -263,33 +279,31 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             }
             nextIndex = (nextIndex + 1) % inputSources.count
         }
-        
+
         // Retrieve the next input source
-        let nextSource = inputSources[nextIndex] 
-        
+        let nextSource = inputSources[nextIndex]
+
         // Switch to the next input source
         TISSelectInputSource(nextSource)
-        
+
         // Print the new input source's name
         let newSourceName = Unmanaged<CFString>.fromOpaque(TISGetInputSourceProperty(nextSource, kTISPropertyLocalizedName)).takeUnretainedValue() as String
         print("Switched to: \(newSourceName)")
-                 
-        
+
         // Show a popup with the language name
         if shouldShowPopup {
-                   showPopup(languageName: newSourceName)
-               }
+            showPopup(languageName: newSourceName)
+        }
     }
-    
+
     func showPopup(languageName: String) {
         // Generate a new UUID to represent the current animation
-           currentAnimationID = UUID()
-           let thisAnimationID = currentAnimationID!
-           
-           // Stop ongoing animations and reset the alphaValue
-           popupWindow?.contentView?.layer?.removeAllAnimations()
-           popupWindow?.alphaValue = 1.0
-           
+        currentAnimationID = UUID()
+        let thisAnimationID = currentAnimationID!
+
+        // Stop ongoing animations and reset the alphaValue
+        popupWindow?.contentView?.layer?.removeAllAnimations()
+        popupWindow?.alphaValue = 1.0
 
         // Create a visual effect view with less translucency
         let visualEffectView = NSVisualEffectView()
@@ -330,11 +344,11 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             grayBox.trailingAnchor.constraint(equalTo: visualEffectView.trailingAnchor, constant: -20),
             grayBox.bottomAnchor.constraint(equalTo: visualEffectView.bottomAnchor, constant: -30),
         ])
-        
+
         // Position the text field within the visual effect view
         NSLayoutConstraint.activate([
             textField.centerXAnchor.constraint(equalTo: visualEffectView.centerXAnchor),
-            textField.centerYAnchor.constraint(equalTo: visualEffectView.centerYAnchor)
+            textField.centerYAnchor.constraint(equalTo: visualEffectView.centerYAnchor),
         ])
 
         // Set the visual effect view as the window's content view
@@ -373,11 +387,5 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         if let dismissalWorkItem = dismissalWorkItem {
             DispatchQueue.main.asyncAfter(deadline: .now() + 1, execute: dismissalWorkItem)
         }
-
     }
-
-
-
-    
 }
-
