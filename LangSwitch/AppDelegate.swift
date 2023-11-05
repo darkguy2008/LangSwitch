@@ -13,101 +13,61 @@ import SwiftUI
 class AppDelegate: NSObject, NSApplicationDelegate {
     var statusBarItem: NSStatusItem?
     var currentAnimationID: UUID?
-    var popupWindow: NSWindow? // The popup window
-    var dismissalWorkItem: DispatchWorkItem? // Holds the current dismissal task
-    var shouldShowPopup = true // Flag to determine whether to show the popup
+    var popupWindow: NSWindow?
+    var dismissalWorkItem: DispatchWorkItem?
+    var shouldShowPopup = true
     var aboutWindow: NSWindow?
     var globeKeyDownTimestamp: TimeInterval?
-    var isGlobeKeyDown: Bool = false // This property tracks the current state of the Fn key
-    var keyPressDuration: TimeInterval = 1 // Default duration
-    var tickLabel: NSTextField!
+    var isGlobeKeyDown: Bool = false
+    var minKeyPressDuration: TimeInterval = 200 // Default minimum duration
+    var maxKeyPressDuration: TimeInterval = 1000 // Default maximum duration
+    var tickLabelMin: NSTextField!
+    var tickLabelMax: NSTextField!
 
-    // This key is used to save and retrieve the setting from UserDefaults.
     private let shouldShowPopupKey = "ShouldShowPopup"
-    private let keyPressDurationKey = "KeyPressDuration"
+    private let minKeyPressDurationKey = "MinKeyPressDurationKey"
+    private let maxKeyPressDurationKey = "MaxKeyPressDurationKey"
 
     func applicationDidFinishLaunching(_: Notification) {
-        // Create a status bar item with a system icon
         statusBarItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
         statusBarItem?.button?.image = NSImage(systemSymbolName: "globe", accessibilityDescription: nil)
 
-        // Load the saved setting or default to true if it hasn't been set yet.
         shouldShowPopup = UserDefaults.standard.bool(forKey: shouldShowPopupKey)
+        minKeyPressDuration = UserDefaults.standard.double(forKey: minKeyPressDurationKey)
+        maxKeyPressDuration = UserDefaults.standard.double(forKey: maxKeyPressDurationKey)
 
-        // Load the saved keyPressDuration setting or default to 200ms if it hasn't been set yet.
-        keyPressDuration = UserDefaults.standard.double(forKey: keyPressDurationKey)
-        if keyPressDuration == 0 {
-            keyPressDuration = 200.0 // Default to 200ms
-        }
-
-        // If the key does not exist, UserDefaults returns false,
-        // so we should handle the initial case when the app is first installed.
         if UserDefaults.standard.object(forKey: shouldShowPopupKey) == nil {
             shouldShowPopup = true
         }
 
-        // If the key does not exist, UserDefaults returns 0,
-        // so we should handle the initial case when the app is first installed.
-        if UserDefaults.standard.object(forKey: keyPressDurationKey) == nil {
-            keyPressDuration = 1
+        if minKeyPressDuration == 0 {
+            minKeyPressDuration = 200.0
         }
 
-        // Create a label for the keypress delay
-        let label = NSTextField(labelWithString: "Keypress delay")
-        label.isBezeled = false
-        label.drawsBackground = false
-        label.alignment = .center
-        label.font = NSFont.systemFont(ofSize: 12)
-
-        // Create tick label
-        tickLabel = NSTextField(labelWithString: "200ms") // Initialize with a default value
-        tickLabel.isBezeled = false
-        tickLabel.drawsBackground = false
-        tickLabel.alignment = .center
-        tickLabel.font = NSFont.systemFont(ofSize: 10)
-
-        // Create a slider for the keypress duration
-        let slider = NSSlider(value: 200, minValue: 0, maxValue: 1000, target: self, action: #selector(sliderValueChanged))
-        slider.numberOfTickMarks = 21
-        slider.allowsTickMarkValuesOnly = true
-        slider.tickMarkPosition = .below
-
-        // Create a view to contain the slider
-        let sliderView = NSView(frame: NSRect(x: 0, y: 0, width: 150, height: 40))
-        sliderView.addSubview(slider)
-
-        // Initialize the slider with the saved value
-        slider.doubleValue = keyPressDuration // Use doubleValue instead of intValue
-        tickLabel.stringValue = "\(Int(keyPressDuration))ms" // Now tickLabel is not nil
-
-        // Create a menu item for the slider and set its view
-        let sliderMenuItem = NSMenuItem()
-        sliderMenuItem.view = sliderView
-
-        // Adjust the slider's frame to fit with the label and tick label
-        slider.frame = NSRect(x: 10, y: 20, width: 140, height: 20)
-
-        // Create a view to contain the label, slider, and tick label
-        let sliderContainer = NSView(frame: NSRect(x: 0, y: 0, width: 150, height: 60))
-        sliderContainer.addSubview(label)
-        sliderContainer.addSubview(slider)
-        sliderContainer.addSubview(tickLabel)
-
-        label.frame = NSRect(x: 0, y: 40, width: 150, height: 20)
-        tickLabel.frame = NSRect(x: 0, y: 0, width: 150, height: 20)
-
-        // Create a menu item for the container and set its view
-        sliderMenuItem.view = sliderContainer
+        if maxKeyPressDuration == 0 {
+            maxKeyPressDuration = 1000.0
+        }
 
         // Modify the menu for the status bar item
         let menu = NSMenu()
         let toggleItem = NSMenuItem(title: "Enable popup", action: #selector(toggleShouldShowPopup), keyEquivalent: "")
         toggleItem.state = shouldShowPopup ? .on : .off // Set the initial state based on the flag
         menu.addItem(toggleItem)
-        // Add the slider menu item to the menu
-        menu.addItem(NSMenuItem.separator()) // Optional: add a separator
-        menu.addItem(sliderMenuItem)
-        menu.addItem(NSMenuItem.separator()) // Optional: add a separator
+
+        // Add a separator after the "Enable Popup" menu item
+        menu.addItem(NSMenuItem.separator())
+
+        // Min keypress delay slider
+        let sliderMinMenuItem = createSliderMenuItem(title: "Min keypress delay", value: minKeyPressDuration, action: #selector(sliderMinValueChanged))
+        menu.addItem(sliderMinMenuItem)
+
+        // Max keypress delay slider
+        let sliderMaxMenuItem = createSliderMenuItem(title: "Max keypress delay", value: maxKeyPressDuration, action: #selector(sliderMaxValueChanged))
+        menu.addItem(sliderMaxMenuItem)
+
+        // Add another separator before the "About" menu item
+        menu.addItem(NSMenuItem.separator())
+
         menu.addItem(withTitle: "About", action: #selector(showAboutDialog), keyEquivalent: "")
         menu.addItem(withTitle: "Exit", action: #selector(exitAction), keyEquivalent: "")
         statusBarItem?.menu = menu
@@ -115,29 +75,23 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         NSApp.setActivationPolicy(.accessory)
         NSApp.hide(nil)
 
-        // Register for key events
-        // Register for key events
         NSEvent.addGlobalMonitorForEvents(matching: [.flagsChanged]) { [weak self] event in
             guard let self = self else { return }
 
             let isGlobeKeyDownNow = event.modifierFlags.contains(.function)
 
             if self.isGlobeKeyDown != isGlobeKeyDownNow {
-                // The state of the Fn key has changed
                 if isGlobeKeyDownNow {
-                    // The Fn key was just pressed down; record the timestamp
                     self.globeKeyDownTimestamp = event.timestamp
                     print("Fn key down at: \(event.timestamp)")
                 } else {
-                    // The Fn key was just released; check the elapsed time
                     if let keyDownTimestamp = self.globeKeyDownTimestamp {
-                        let elapsedTime = (event.timestamp - keyDownTimestamp) * 1000 // Convert to milliseconds
+                        let elapsedTime = (event.timestamp - keyDownTimestamp) * 1000
 
                         print("Fn key up at: \(event.timestamp)")
                         print("Elapsed time: \(elapsedTime)ms")
 
-                        if elapsedTime > self.keyPressDuration {
-                            // More than X milliseconds between keyDown and keyUp, trigger the language switch
+                        if elapsedTime > self.minKeyPressDuration && elapsedTime < self.maxKeyPressDuration {
                             print("Switching language...")
                             self.switchKeyboardLanguage()
                         } else {
@@ -145,33 +99,61 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                         }
                     }
                 }
-
-                // Update the current state of the Fn key
                 self.isGlobeKeyDown = isGlobeKeyDownNow
             }
         }
 
-        // Initialize the popup window with no title bar and transparent background
-        // Initialize the popup window with no title bar and transparent background
-        let windowSize = NSRect(x: 0, y: 0, width: 300, height: 125)
-        popupWindow = NSWindow(contentRect: windowSize, styleMask: [.borderless], backing: .buffered, defer: false)
-        popupWindow?.backgroundColor = NSColor.clear
-        popupWindow?.isOpaque = false
-        popupWindow?.level = NSWindow.Level.statusBar
-        popupWindow?.hasShadow = false
-        popupWindow?.level = .floating
-
         createAboutWindow()
     }
 
-    @objc func sliderValueChanged(sender: NSSlider) {
-        // Update the keypress duration based on the slider's value
-        keyPressDuration = TimeInterval(sender.doubleValue) // Use doubleValue instead of intValue
-        tickLabel.stringValue = "\(Int(keyPressDuration))ms"
-        print("Keypress duration set to: \(keyPressDuration)ms") // Just for confirmation, can be removed
+    @objc func sliderMinValueChanged(sender: NSSlider) {
+        minKeyPressDuration = TimeInterval(sender.doubleValue)
+        tickLabelMin.stringValue = "\(Int(minKeyPressDuration))ms"
+        UserDefaults.standard.set(minKeyPressDuration, forKey: minKeyPressDurationKey)
+    }
 
-        // Save the new keyPressDuration to UserDefaults
-        UserDefaults.standard.set(keyPressDuration, forKey: keyPressDurationKey)
+    @objc func sliderMaxValueChanged(sender: NSSlider) {
+        maxKeyPressDuration = TimeInterval(sender.doubleValue)
+        tickLabelMax.stringValue = "\(Int(maxKeyPressDuration))ms"
+        UserDefaults.standard.set(maxKeyPressDuration, forKey: maxKeyPressDurationKey)
+    }
+
+    func createSliderMenuItem(title: String, value: TimeInterval, action: Selector) -> NSMenuItem {
+        let label = NSTextField(labelWithString: title)
+        label.isBezeled = false
+        label.drawsBackground = false
+        label.alignment = .center
+        label.font = NSFont.systemFont(ofSize: 12)
+
+        let tickLabel = NSTextField(labelWithString: "\(Int(value))ms")
+        tickLabel.isBezeled = false
+        tickLabel.drawsBackground = false
+        tickLabel.alignment = .center
+        tickLabel.font = NSFont.systemFont(ofSize: 10)
+
+        let slider = NSSlider(value: value, minValue: 0, maxValue: 1000, target: self, action: action)
+        slider.numberOfTickMarks = 21
+        slider.allowsTickMarkValuesOnly = true
+        slider.tickMarkPosition = .below
+
+        let sliderContainer = NSView(frame: NSRect(x: 0, y: 0, width: 150, height: 60))
+        sliderContainer.addSubview(label)
+        sliderContainer.addSubview(slider)
+        sliderContainer.addSubview(tickLabel)
+
+        label.frame = NSRect(x: 0, y: 40, width: 150, height: 20)
+        slider.frame = NSRect(x: 10, y: 20, width: 140, height: 20)
+        tickLabel.frame = NSRect(x: 0, y: 0, width: 150, height: 20)
+
+        if title == "Min keypress delay" {
+            tickLabelMin = tickLabel
+        } else {
+            tickLabelMax = tickLabel
+        }
+
+        let sliderMenuItem = NSMenuItem()
+        sliderMenuItem.view = sliderContainer
+        return sliderMenuItem
     }
 
     func createAboutWindow() {
@@ -304,6 +286,17 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         // Stop ongoing animations and reset the alphaValue
         popupWindow?.contentView?.layer?.removeAllAnimations()
         popupWindow?.alphaValue = 1.0
+
+        // Initialize the popup window if it's nil
+        if popupWindow == nil {
+            let windowSize = NSRect(x: 0, y: 0, width: 300, height: 125)
+            popupWindow = NSWindow(contentRect: windowSize, styleMask: [.borderless], backing: .buffered, defer: false)
+            popupWindow?.backgroundColor = NSColor.clear
+            popupWindow?.isOpaque = false
+            popupWindow?.level = NSWindow.Level.statusBar
+            popupWindow?.hasShadow = false
+            popupWindow?.level = .floating
+        }
 
         // Create a visual effect view with less translucency
         let visualEffectView = NSVisualEffectView()
