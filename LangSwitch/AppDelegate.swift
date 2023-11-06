@@ -32,16 +32,24 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         statusBarItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
         statusBarItem?.button?.image = NSImage(systemSymbolName: "globe", accessibilityDescription: nil)
 
-        shouldShowPopup = UserDefaults.standard.bool(forKey: shouldShowPopupKey)
-        minKeyPressDuration = UserDefaults.standard.double(forKey: minKeyPressDurationKey)
-        maxKeyPressDuration = UserDefaults.standard.double(forKey: maxKeyPressDurationKey)
+        // Retrieve the saved values from UserDefaults, or use the default values if they don't exist
+        if let savedMinDuration = UserDefaults.standard.object(forKey: minKeyPressDurationKey) as? Double {
+            minKeyPressDuration = savedMinDuration
+        } else {
+            minKeyPressDuration = 200.0 // Default minimum duration
+        }
+
+        if let savedMaxDuration = UserDefaults.standard.object(forKey: maxKeyPressDurationKey) as? Double {
+            maxKeyPressDuration = savedMaxDuration
+        } else {
+            maxKeyPressDuration = 1000.0 // Default maximum duration
+        }
+
+        print("minKeyPressDuration in settings: \(minKeyPressDuration)")
+        print("maxKeyPressDuration in settings: \(maxKeyPressDuration)")
 
         if UserDefaults.standard.object(forKey: shouldShowPopupKey) == nil {
             shouldShowPopup = true
-        }
-
-        if minKeyPressDuration == 0 {
-            minKeyPressDuration = 200.0
         }
 
         if maxKeyPressDuration == 0 {
@@ -109,16 +117,20 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     @objc func sliderMinValueChanged(sender: NSSlider) {
         minKeyPressDuration = TimeInterval(sender.doubleValue)
         tickLabelMin.stringValue = "\(Int(minKeyPressDuration))ms"
-        UserDefaults.standard.set(minKeyPressDuration, forKey: minKeyPressDurationKey)
+        UserDefaults.standard.set(sender.doubleValue, forKey: minKeyPressDurationKey)
+        UserDefaults.standard.synchronize() // Ensure the value is saved immediately
+        print("sliderMinValueChanged: \(sender.doubleValue)")
     }
 
     @objc func sliderMaxValueChanged(sender: NSSlider) {
         maxKeyPressDuration = TimeInterval(sender.doubleValue)
         tickLabelMax.stringValue = "\(Int(maxKeyPressDuration))ms"
-        UserDefaults.standard.set(maxKeyPressDuration, forKey: maxKeyPressDurationKey)
+        UserDefaults.standard.set(sender.doubleValue, forKey: maxKeyPressDurationKey)
+        UserDefaults.standard.synchronize() // Ensure the value is saved immediately
+        print("sliderMaxValueChanged: \(sender.doubleValue)")
     }
 
-    func createSliderMenuItem(title: String, value: TimeInterval, action: Selector) -> NSMenuItem {
+    func createSliderMenuItem(title: String, value: Double, action: Selector) -> NSMenuItem {
         let label = NSTextField(labelWithString: title)
         label.isBezeled = false
         label.drawsBackground = false
@@ -130,6 +142,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         tickLabel.drawsBackground = false
         tickLabel.alignment = .center
         tickLabel.font = NSFont.systemFont(ofSize: 10)
+
+        print("create slider with value: \(value)")
 
         let slider = NSSlider(value: value, minValue: 0, maxValue: 1000, target: self, action: action)
         slider.numberOfTickMarks = 21
